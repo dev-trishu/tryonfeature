@@ -17,7 +17,6 @@ async function initCamera() {
       device.label.toLowerCase().includes("rear")
     );
 
-    // fallback: last camera (usually rear)
     if (!backCamera && videoDevices.length > 0) {
       backCamera = videoDevices[videoDevices.length - 1];
     }
@@ -66,6 +65,8 @@ scene.add(light);
 const geometry = new THREE.BoxGeometry(0.2, 0.1, 0.4);
 const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
 const heel = new THREE.Mesh(geometry, material);
+
+// ALWAYS visible at start
 heel.position.set(0, 0, 0);
 scene.add(heel);
 
@@ -76,39 +77,64 @@ const pose = new window.Pose({
 });
 
 pose.setOptions({
-  modelComplexity: 1,
+  modelComplexity: 2, // 🔥 higher accuracy
   smoothLandmarks: true,
 });
 
 pose.onResults((results) => {
   console.log("MediaPipe running 🔥");
 
-  if (!results.poseLandmarks) return;
+  if (!results.poseLandmarks) {
+    console.log("❌ No landmarks");
+    return;
+  }
 
-  console.log("Landmarks detected ✅");
+  console.log("✅ Landmarks detected");
 
-  const leftHeel = results.poseLandmarks[29];
-  const leftFootIndex = results.poseLandmarks[31];
+  const lm = results.poseLandmarks;
 
-  if (!leftHeel || !leftFootIndex) return;
+  // Left foot
+  const leftHeel = lm[29];
+  const leftFootIndex = lm[31];
 
-  // Position (center of foot)
-  const x = ((leftHeel.x + leftFootIndex.x) / 2 - 0.5) * 2;
-  const y = -((leftHeel.y + leftFootIndex.y) / 2 - 0.5) * 2;
+  // Right foot
+  const rightHeel = lm[30];
+  const rightFootIndex = lm[32];
+
+  // Choose whichever is visible
+  let heelPoint = null;
+  let toePoint = null;
+
+  if (leftHeel && leftFootIndex) {
+    heelPoint = leftHeel;
+    toePoint = leftFootIndex;
+  } else if (rightHeel && rightFootIndex) {
+    heelPoint = rightHeel;
+    toePoint = rightFootIndex;
+  }
+
+  if (!heelPoint || !toePoint) {
+    console.log("❌ Foot not detected");
+    return;
+  }
+
+  // Position
+  const x = ((heelPoint.x + toePoint.x) / 2 - 0.5) * 2;
+  const y = -((heelPoint.y + toePoint.y) / 2 - 0.5) * 2;
 
   heel.position.set(x, y, 0);
 
   // Rotation
   const angle = Math.atan2(
-    leftFootIndex.y - leftHeel.y,
-    leftFootIndex.x - leftHeel.x
+    toePoint.y - heelPoint.y,
+    toePoint.x - heelPoint.x
   );
   heel.rotation.z = -angle;
 
   // Scale
   const distance = Math.sqrt(
-    Math.pow(leftFootIndex.x - leftHeel.x, 2) +
-    Math.pow(leftFootIndex.y - leftHeel.y, 2)
+    Math.pow(toePoint.x - heelPoint.x, 2) +
+    Math.pow(toePoint.y - heelPoint.y, 2)
   );
 
   const scale = distance * 5;
