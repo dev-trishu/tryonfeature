@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Heel Try-On</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <h3>Point camera at your feet 👣</h3>
+
+  <video id="video" autoplay playsinline></video>
+  <canvas id="output_canvas"></canvas>
+
+  <!-- MediaPipe -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+
+  <!-- Main Script -->
+  <script type="module" src="app.js"></script>
+
+</body>
+</html>
