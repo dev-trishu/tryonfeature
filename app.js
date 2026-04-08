@@ -6,15 +6,31 @@ const canvas = document.getElementById("output_canvas");
 
 // ---------------- CAMERA ----------------
 async function initCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "environment" },
-    audio: false,
-  });
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: {
+          exact: "environment" // 🔥 force back camera
+        }
+      },
+      audio: false,
+    });
 
-  video.srcObject = stream;
-  await video.play();
+    video.srcObject = stream;
+    await video.play();
 
-  console.log("Camera started ✅");
+    console.log("Back camera started ✅");
+  } catch (err) {
+    console.log("Fallback to default camera");
+
+    // fallback if exact fails
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+    });
+
+    video.srcObject = stream;
+    await video.play();
+  }
 }
 
 initCamera();
