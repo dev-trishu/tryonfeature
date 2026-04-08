@@ -35,6 +35,21 @@ async function initCamera() {
 
 initCamera();
 
+
+const devices = await navigator.mediaDevices.enumerateDevices();
+
+const backCamera = devices.find(
+  (device) =>
+    device.kind === "videoinput" &&
+    device.label.toLowerCase().includes("back")
+);
+
+const stream = await navigator.mediaDevices.getUserMedia({
+  video: {
+    deviceId: backCamera ? { exact: backCamera.deviceId } : undefined
+  }
+});
+
 // ---------------- THREE ----------------
 const scene = new THREE.Scene();
 
