@@ -4,40 +4,26 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.158/build/three.mod
 const video = document.getElementById("video");
 const canvas = document.getElementById("output_canvas");
 
-// ---------------- CAMERA (FORCE BACK CAMERA) ----------------
+// ---------------- CAMERA ----------------
 async function initCamera() {
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter(d => d.kind === "videoinput");
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const videoDevices = devices.filter(d => d.kind === "videoinput");
 
-    console.log("All cameras:", videoDevices);
+  let backCamera = videoDevices[videoDevices.length - 1]; // last = rear
 
-    let backCamera = videoDevices.find(device =>
-      device.label.toLowerCase().includes("back") ||
-      device.label.toLowerCase().includes("rear")
-    );
-
-    if (!backCamera && videoDevices.length > 0) {
-      backCamera = videoDevices[videoDevices.length - 1];
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: {
+      deviceId: backCamera ? { exact: backCamera.deviceId } : undefined
     }
+  });
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        deviceId: backCamera ? { exact: backCamera.deviceId } : undefined
-      },
-      audio: false,
-    });
+  video.srcObject = stream;
+  await video.play();
 
-    video.srcObject = stream;
-    await video.play();
-
-    console.log("Using camera:", backCamera?.label);
-  } catch (err) {
-    console.error("Camera error ❌", err);
-  }
+  console.log("Camera started ✅");
 }
 
-initCamera();
+await initCamera();
 
 // ---------------- THREE ----------------
 const scene = new THREE.Scene();
@@ -61,13 +47,10 @@ const light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(0, 1, 1);
 scene.add(light);
 
-// ---------------- DEBUG BOX ----------------
+// Box
 const geometry = new THREE.BoxGeometry(0.2, 0.1, 0.4);
 const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
 const heel = new THREE.Mesh(geometry, material);
-
-// ALWAYS visible at start
-heel.position.set(0, 0, 0);
 scene.add(heel);
 
 // ---------------- MEDIAPIPE ----------------
@@ -77,82 +60,57 @@ const pose = new window.Pose({
 });
 
 pose.setOptions({
-  modelComplexity: 2, // 🔥 higher accuracy
+  modelComplexity: 2,
   smoothLandmarks: true,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5,
 });
 
 pose.onResults((results) => {
-  console.log("MediaPipe running 🔥");
-
   if (!results.poseLandmarks) {
     console.log("❌ No landmarks");
     return;
   }
 
-  console.log("✅ Landmarks detected");
+  console.log("✅ Tracking");
 
   const lm = results.poseLandmarks;
 
-  // Left foot
-  const leftHeel = lm[29];
-  const leftFootIndex = lm[31];
+  const heelPoint = lm[29] || lm[30];
+  const toePoint = lm[31] || lm[32];
 
-  // Right foot
-  const rightHeel = lm[30];
-  const rightFootIndex = lm[32];
+  if (!heelPoint || !toePoint) return;
 
-  // Choose whichever is visible
-  let heelPoint = null;
-  let toePoint = null;
-
-  if (leftHeel && leftFootIndex) {
-    heelPoint = leftHeel;
-    toePoint = leftFootIndex;
-  } else if (rightHeel && rightFootIndex) {
-    heelPoint = rightHeel;
-    toePoint = rightFootIndex;
-  }
-
-  if (!heelPoint || !toePoint) {
-    console.log("❌ Foot not detected");
-    return;
-  }
-
-  // Position
   const x = ((heelPoint.x + toePoint.x) / 2 - 0.5) * 2;
   const y = -((heelPoint.y + toePoint.y) / 2 - 0.5) * 2;
 
   heel.position.set(x, y, 0);
 
-  // Rotation
+  // rotation
   const angle = Math.atan2(
     toePoint.y - heelPoint.y,
     toePoint.x - heelPoint.x
   );
   heel.rotation.z = -angle;
 
-  // Scale
-  const distance = Math.sqrt(
-    Math.pow(toePoint.x - heelPoint.x, 2) +
-    Math.pow(toePoint.y - heelPoint.y, 2)
+  // scale
+  const dist = Math.hypot(
+    toePoint.x - heelPoint.x,
+    toePoint.y - heelPoint.y
   );
-
-  const scale = distance * 5;
-  heel.scale.set(scale, scale, scale);
+  const s = dist * 5;
+  heel.scale.set(s, s, s);
 });
 
-// ---------------- CAMERA LOOP ----------------
-const cameraUtils = new window.Camera(video, {
-  onFrame: async () => {
-    if (video.readyState === 4) {
-      await pose.send({ image: video });
-    }
-  },
-  width: 640,
-  height: 480,
-});
+// ---------------- MANUAL LOOP (IMPORTANT FIX) ----------------
+async function processFrame() {
+  if (video.readyState === 4) {
+    await pose.send({ image: video });
+  }
+  requestAnimationFrame(processFrame);
+}
 
-cameraUtils.start();
+processFrame();
 
 // ---------------- RENDER LOOP ----------------
 function animate() {
@@ -160,10 +118,3 @@ function animate() {
   renderer.render(scene, camera3D);
 }
 animate();
-
-// ---------------- RESIZE ----------------
-window.addEventListener("resize", () => {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera3D.aspect = window.innerWidth / window.innerHeight;
-  camera3D.updateProjectionMatrix();
-});
